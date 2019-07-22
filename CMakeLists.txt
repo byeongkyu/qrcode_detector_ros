@@ -14,8 +14,11 @@ find_package(catkin REQUIRED COMPONENTS
   image_transport
   sensor_msgs
   std_msgs
-
+  geometry_msgs
+  message_generation
 )
+
+find_package(OpenCV REQUIRED)
 
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
@@ -51,11 +54,10 @@ find_package(catkin REQUIRED COMPONENTS
 ##   * add every package in MSG_DEP_SET to generate_messages(DEPENDENCIES ...)
 
 ## Generate messages in the 'msg' folder
-# add_message_files(
-#   FILES
-#   Message1.msg
-#   Message2.msg
-# )
+add_message_files(
+  FILES
+  Result.msg
+)
 
 ## Generate services in the 'srv' folder
 # add_service_files(
@@ -72,10 +74,11 @@ find_package(catkin REQUIRED COMPONENTS
 # )
 
 ## Generate added messages and services with any dependencies listed here
-# generate_messages(
-#   DEPENDENCIES
-#   std_msgs  # Or other packages containing msgs
-# )
+generate_messages(
+  DEPENDENCIES
+  geometry_msgs
+  std_msgs  # Or other packages containing msgs
+)
 
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
@@ -151,6 +154,8 @@ add_executable(qrcode_detector_node src/qrcode_detector_ros_node.cpp)
 
 ## Specify libraries to link a library or executable target against
 target_link_libraries(qrcode_detector_node
+  zbar
+  ${OpenCV_LIBS}
   ${catkin_LIBRARIES}
 )
 
