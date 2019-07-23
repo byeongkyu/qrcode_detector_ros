@@ -38,6 +38,7 @@ class QRCodeDetectorNode
             scanner.set_config(zbar::ZBAR_QRCODE, zbar::ZBAR_CFG_ENABLE, 1);
 
             cv::namedWindow("result", cv::WINDOW_AUTOSIZE);
+            ROS_INFO("[%s] initialized...", ros::this_node::getName().c_str());
         }
         ~QRCodeDetectorNode()
         {
@@ -49,6 +50,7 @@ class QRCodeDetectorNode
     public:
         void callback(const sensor_msgs::ImageConstPtr& image, const sensor_msgs::PointCloud2ConstPtr& pointcloud)
         {
+            // Convert from ROS message to OpenCV Image and PointCloud.
             cv_bridge::CvImagePtr cv_ptr;
             try
             {
@@ -63,16 +65,16 @@ class QRCodeDetectorNode
             pcl::PointCloud<pcl::PointXYZRGB> pcl_cloud;
             pcl::fromROSMsg(*pointcloud, pcl_cloud);
 
-
-
+            // Convert Image to Gray and Y800 Format for zbar.
             cv::Mat imGray;
             cv::cvtColor(cv_ptr->image, imGray, CV_BGR2GRAY);
-
             zbar::Image zImage(cv_ptr->image.cols, cv_ptr->image.rows, "Y800", (unsigned char*) imGray.data, cv_ptr->image.cols * cv_ptr->image.rows);
-            int numCodes = scanner.scan(zImage);
 
+            // Scan image and find the codes.
+            int numCodes = scanner.scan(zImage);
             ROS_DEBUG("Found %d codes...", numCodes);
 
+            // Loop for each code in found codes.
             int count = 0;
             cv::RNG rng(12345);
             for (zbar::Image::SymbolIterator symbol = zImage.symbol_begin(); symbol != zImage.symbol_end(); ++symbol)
@@ -93,15 +95,15 @@ class QRCodeDetectorNode
                 cv::Scalar color = cv::Scalar(rng.uniform(0, 256), rng.uniform(0,256), rng.uniform(0,256));
                 for(int i = 0; i < hull.size(); i++)
                 {
-                    cv::line(cv_ptr->image, hull[i], hull[(i+1) % hull.size()], cv::Scalar(0, 255, 0), i*2);
+                    cv::line(cv_ptr->image, hull[i], hull[(i+1) % hull.size()], color, 2);
                 }
 
-                // get ROI rectangle for each codes
+                // get ROI rectangle for get plane on PointCloud
                 cv::Rect rect_roi = cv::Rect(
                         cv::Point(std::max(hull[0].x, hull[1].x), std::max(hull[0].y, hull[3].y)),
                         cv::Point(std::min(hull[2].x, hull[3].x), std::min(hull[1].y, hull[2].y))
                 );
-                cv::rectangle(cv_ptr->image, rect_roi, cv::Scalar(255, 0, 0), 2);
+                cv::rectangle(cv_ptr->image, rect_roi, cv::Scalar(0, 0, 255), 2);
 
                 pcl::PointCloud<pcl::PointXYZRGB> pcl_centroid_points;
                 for(int y = 0; y < rect_roi.height; y++)
@@ -115,12 +117,17 @@ class QRCodeDetectorNode
                     }
                 }
 
+                // get centroid point
                 Eigen::Vector4f centroid;
                 unsigned int ret = pcl::compute3DCentroid(pcl_centroid_points, centroid);
 
                 if(!std::isnan(centroid[0]))
                 {
                     ROS_DEBUG("%f, %f, %f", centroid[0], centroid[1], centroid[2]);
+                }
+                else
+                {
+                    return;
                 }
 
                 // find plane equation
@@ -133,19 +140,22 @@ class QRCodeDetectorNode
                 {
                     ROS_DEBUG("Plane a: %f, b: %f, c: %f, d: %f", plane_parameters[0], plane_parameters[1], plane_parameters[2], plane_parameters[3]);
                 }
+                else
+                {
+                    return;
+                }
 
-
-                // find offset point
+                // find offset point on the normal vector
                 double offset_distance = -100.0;
                 double offset_origin_x = centroid[0] + plane_parameters[0] * offset_distance / 1000.0;
                 double offset_origin_y = centroid[1] + plane_parameters[1] * offset_distance / 1000.0;
                 double offset_origin_z = centroid[2] + plane_parameters[2] * offset_distance / 1000.0;
 
-
                 // create static tf
                 geometry_msgs::TransformStamped transformStamped;
+                std::string qrcode_name = "qrcode_" + std::to_string(count);
                 transformStamped.header.frame_id = "camera_color_optical_frame";
-                transformStamped.child_frame_id = "qrcode_offset";
+                transformStamped.child_frame_id = qrcode_name;
 
                 transformStamped.transform.translation.x = offset_origin_x;
                 transformStamped.transform.translation.y = offset_origin_y;
@@ -155,12 +165,12 @@ class QRCodeDetectorNode
                 double dy = offset_origin_y - centroid[1];
                 double dz = offset_origin_z - centroid[2];
 
-                tf2::Quaternion q;
+                Eigen::Vector3f v1(0, 0, 1);
+                Eigen::Vector3f v2(plane_parameters[0], plane_parameters[1], plane_parameters[2]);
 
-                //ROS_INFO("%f", M_PI + atan2(dy, dz));
-                //
-                //
-                q.setRPY(-atan2(dy, dz) - M_PI, atan2(dx, dz) - M_PI, M_PI - atan2(dx, dy));
+                Eigen::Quaternionf q = Eigen::Quaternionf::FromTwoVectors(v1, v2);
+                q.normalize();
+                ROS_DEBUG("Quaternion result: %f %f %f %f", q.x(), q.y(), q.z(), q.w());
 
                 transformStamped.transform.rotation.x = q.x();
                 transformStamped.transform.rotation.y = q.y();
@@ -182,9 +192,9 @@ class QRCodeDetectorNode
                 msg.pose.pose.position.z = offset_origin_z;
 
                 msg.pose.pose.orientation.x = q.x();
-                msg.pose.pose.orientation.x = q.y();
-                msg.pose.pose.orientation.x = q.z();
-                msg.pose.pose.orientation.x = q.w();
+                msg.pose.pose.orientation.y = q.y();
+                msg.pose.pose.orientation.z = q.z();
+                msg.pose.pose.orientation.w = q.w();
 
                 pub_result_.publish(msg);
 
@@ -192,9 +202,6 @@ class QRCodeDetectorNode
             }
 
             zImage.set_data(NULL, 0);
-
-
-
 
             cv::imshow("result", cv_ptr->image);
             cv::waitKey(1);
