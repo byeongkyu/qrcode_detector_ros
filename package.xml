@@ -52,12 +52,15 @@
   <build_depend>cv_bridge</build_depend>
   <build_depend>pcl_ros</build_depend>
   <build_depend>roscpp</build_depend>
+  <build_depend>zbar</build_depend>
   <build_export_depend>cv_bridge</build_export_depend>
   <build_export_depend>pcl_ros</build_export_depend>
   <build_export_depend>roscpp</build_export_depend>
+  <build_export_depend>zbar</build_export_depend>
   <exec_depend>cv_bridge</exec_depend>
   <exec_depend>pcl_ros</exec_depend>
   <exec_depend>roscpp</exec_depend>
+  <exec_depend>zbar</exec_depend>
 
 
   <!-- The export tag contains other, unspecified, tags -->
