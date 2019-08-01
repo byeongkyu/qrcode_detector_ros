@@ -28,16 +28,17 @@ class QRCodeDetectorNode
         QRCodeDetectorNode()
         : it_(nh_)
         {
-            image_sub_ =  new message_filters::Subscriber<sensor_msgs::Image>(nh_, "image_raw", 10);
+            image_sub_ = new message_filters::Subscriber<sensor_msgs::Image>(nh_, "image_raw", 10);
             pointcloud_sub_ = new message_filters::Subscriber<sensor_msgs::PointCloud2>(nh_, "points", 10);
             sync_ = new message_filters::Synchronizer<MySyncPolicy>(MySyncPolicy(20), *image_sub_, *pointcloud_sub_);
             sync_->registerCallback(boost::bind(&QRCodeDetectorNode::callback, this, _1, _2));
 
+            pub_debug_image_ = it_.advertise("detected_image", 1);
             pub_result_ = nh_.advertise<qrcode_detector_ros::Result>("detected_code", 10);
 
             scanner.set_config(zbar::ZBAR_QRCODE, zbar::ZBAR_CFG_ENABLE, 1);
 
-            cv::namedWindow("result", cv::WINDOW_AUTOSIZE);
+            //cv::namedWindow("result", cv::WINDOW_AUTOSIZE);
             ROS_INFO("[%s] initialized...", ros::this_node::getName().c_str());
         }
         ~QRCodeDetectorNode()
@@ -202,9 +203,10 @@ class QRCodeDetectorNode
             }
 
             zImage.set_data(NULL, 0);
+            pub_debug_image_.publish(cv_ptr->toImageMsg());
 
-            cv::imshow("result", cv_ptr->image);
-            cv::waitKey(1);
+            // cv::imshow("result", cv_ptr->image);
+            // cv::waitKey(1);
         }
 
     private:
@@ -218,6 +220,7 @@ class QRCodeDetectorNode
 
         zbar::ImageScanner scanner;
         ros::Publisher pub_result_;
+        image_transport::Publisher pub_debug_image_;
 };
 
 
