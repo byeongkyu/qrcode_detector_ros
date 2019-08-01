@@ -179,7 +179,7 @@ class QRCodeDetectorNode
                 transformStamped.transform.rotation.w = q.w();
 
                 transformStamped.header.stamp = ros::Time::now();
-                tfb_.sendTransform(transformStamped);
+                // tfb_.sendTransform(transformStamped);
 
                 // Publish result
                 qrcode_detector_ros::Result msg;
